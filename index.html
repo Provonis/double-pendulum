@@ -1,0 +1,1571 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Double Pendulum Solver</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #f0f2f5;
+    --stage: #fbfbfc;
+    --text: #171a1f;
+    --muted: #5d6573;
+    --border: #dde1e7;
+    --accent: #2457d6;
+    --accent-contrast: #ffffff;
+    --m1: #1f77b4;
+    --m2: #e8710a;
+    --energy: #8c5fc2;
+    --rod: #3b404b;
+    --grid: rgba(23, 26, 31, 0.09);
+    --shadow-pend: #8a93a3;
+    --danger: #c62f2f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1014;
+      --surface: #161920;
+      --surface-2: #1d2129;
+      --stage: #12151b;
+      --text: #e6e8ec;
+      --muted: #9aa2b1;
+      --border: #2a2f39;
+      --accent: #6d97ff;
+      --accent-contrast: #0e1014;
+      --m1: #5aa9e6;
+      --m2: #ff9d45;
+      --energy: #b48ef0;
+      --rod: #cfd4dc;
+      --grid: rgba(230, 232, 236, 0.09);
+      --shadow-pend: #7d8696;
+      --danger: #ff6b6b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1014;
+    --surface: #161920;
+    --surface-2: #1d2129;
+    --stage: #12151b;
+    --text: #e6e8ec;
+    --muted: #9aa2b1;
+    --border: #2a2f39;
+    --accent: #6d97ff;
+    --accent-contrast: #0e1014;
+    --m1: #5aa9e6;
+    --m2: #ff9d45;
+    --energy: #b48ef0;
+    --rod: #cfd4dc;
+    --grid: rgba(230, 232, 236, 0.09);
+    --shadow-pend: #7d8696;
+    --danger: #ff6b6b;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  .app {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 330px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "head head"
+      "controls stage"
+      "controls diag";
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .app {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+      grid-template-areas: "head" "stage" "controls" "diag";
+    }
+  }
+
+  header { grid-area: head; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  kbd {
+    font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+    border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px;
+    padding: 0 4px; background: var(--surface);
+  }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+
+  /* ---------- Controls ---------- */
+  .controls { grid-area: controls; padding: 4px 16px 16px; }
+  .controls section { padding-top: 12px; }
+  .controls section + section { border-top: 1px solid var(--border); margin-top: 14px; }
+  .controls h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin: 0 0 10px; font-weight: 600;
+  }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field.full { grid-column: 1 / -1; }
+  .field > span.lab { font-size: 12px; color: var(--muted); }
+  .inp {
+    display: flex; align-items: center;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
+    transition: border-color 0.15s;
+  }
+  .inp:focus-within { border-color: var(--accent); }
+  .inp input, .inp select {
+    flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text);
+    font: inherit; font-variant-numeric: tabular-nums; padding: 7px 8px; outline: none;
+  }
+  .inp .unit { padding: 0 9px 0 2px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .inp:has(input[aria-invalid="true"]) { border-color: var(--danger); }
+  select.plain {
+    width: 100%; font: inherit; color: var(--text); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px;
+  }
+  .hint { font-size: 11.5px; color: var(--muted); min-height: 1em; }
+  .form-error { color: var(--danger); font-size: 12.5px; margin-top: 10px; }
+  .form-error:empty { display: none; }
+  .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+
+  .check { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .check input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+
+  .theory { display: grid; gap: 8px; }
+  .mode-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--surface-2); border-radius: 8px; padding: 7px 8px 7px 10px;
+  }
+  .mode-row .val { font-size: 13px; }
+  .mode-row .sub { font-size: 11.5px; color: var(--muted); }
+
+  details { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+  details summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  details p, details li { font-size: 12.5px; color: var(--muted); }
+  details ul { padding-left: 18px; margin: 8px 0; }
+  details code { font-size: 11.5px; }
+
+  /* ---------- Buttons ---------- */
+  button { font: inherit; color: inherit; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: 8px; padding: 7px 12px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: var(--surface-2); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent); border-color: var(--accent); color: var(--accent-contrast);
+    font-weight: 600; min-width: 104px; justify-content: center;
+  }
+  .btn.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+  .btn.small { padding: 4px 9px; font-size: 12.5px; }
+  .btn svg { width: 14px; height: 14px; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px 6px 10px;
+    background: var(--surface); cursor: pointer; white-space: nowrap;
+  }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--c); }
+  .chip[aria-pressed="true"] {
+    border-color: var(--c);
+    background: color-mix(in srgb, var(--c) 14%, var(--surface));
+  }
+  .chip[aria-pressed="true"] .dot { background: var(--c); }
+  .chip.m1 { --c: var(--m1); }
+  .chip.m2 { --c: var(--m2); }
+
+  /* ---------- Stage ---------- */
+  .stage { grid-area: stage; overflow: hidden; }
+  .canvas-wrap {
+    position: relative; height: clamp(320px, 60vh, 720px); background: var(--stage);
+    border-bottom: 1px solid var(--border);
+  }
+  .canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay {
+    position: absolute; top: 10px; left: 12px; right: 12px; pointer-events: none;
+    display: flex; justify-content: space-between; gap: 12px; font-size: 13px;
+  }
+  .overlay .time { font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .overlay .status { color: var(--muted); text-align: right; }
+
+  .toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+  }
+  .toolbar .group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .toolbar .sep { width: 1px; height: 24px; background: var(--border); margin: 0 2px; }
+  @media (max-width: 640px) { .toolbar .sep { display: none; } }
+  .toolbar .lab { font-size: 12px; color: var(--muted); }
+  .toolbar select { width: auto; padding: 5px 8px; }
+
+  .readouts {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    margin: 0 -1px -1px 0;
+  }
+  .readout { padding: 9px 14px; min-width: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .readout .k { font-size: 11.5px; color: var(--muted); }
+  .readout .v { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- Diagnostics ---------- */
+  .diag { grid-area: diag; padding: 12px 14px 14px; }
+  .diag-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .tabs { display: inline-flex; flex-wrap: wrap; background: var(--surface-2); border-radius: 9px; padding: 3px; gap: 2px; }
+  .tabs button {
+    border: 0; background: transparent; color: var(--muted); border-radius: 7px;
+    padding: 5px 10px; cursor: pointer; font-size: 13px;
+  }
+  .tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+  .plot-wrap { position: relative; height: 250px; }
+  .plot-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .caption { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Double Pendulum Solver</h1>
+    <p>Same equations of motion as the notebook · θ measured from the downward vertical · drag a bob to set its angle · <kbd>Space</kbd> start/pause · <kbd>R</kbd> reset</p>
+  </header>
+
+  <!-- ======================= Stage ======================= -->
+  <main class="stage card">
+    <div class="canvas-wrap" id="stageWrap">
+      <canvas id="stage" aria-label="Double pendulum animation"></canvas>
+      <div class="overlay">
+        <span class="time mono num" id="timeLabel">t = 0.000 s</span>
+        <span class="status" id="statusLabel">Ready</span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn primary" id="startBtn" type="button">Start</button>
+      <button class="btn" id="resetBtn" type="button" title="Reset to the initial conditions (R)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 8a5.5 5.5 0 1 0 1.7-4"/><path d="M2.5 2.5v3h3"/></svg>
+        Reset
+      </button>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="group" role="group" aria-label="Traces">
+        <span class="lab">Trace</span>
+        <button class="chip m1" id="trace1" type="button" aria-pressed="true"><span class="dot"></span>Mass 1</button>
+        <button class="chip m2" id="trace2" type="button" aria-pressed="true"><span class="dot"></span>Mass 2</button>
+        <select class="plain" id="traceLen" aria-label="Trace length">
+          <option value="2">Last 2 s</option>
+          <option value="5">Last 5 s</option>
+          <option value="10" selected>Last 10 s</option>
+          <option value="30">Last 30 s</option>
+          <option value="inf">Whole run</option>
+        </select>
+        <button class="btn small" id="clearTrace" type="button">Clear trace</button>
+      </span>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="group">
+        <span class="lab">Speed</span>
+        <select class="plain" id="speed" aria-label="Playback speed">
+          <option value="0.1">0.1×</option>
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </span>
+    </div>
+
+    <div class="readouts">
+      <div class="readout"><div class="k">θ<sub>1</sub> (wrapped)</div><div class="v mono num" id="r-th1">—</div></div>
+      <div class="readout"><div class="k">θ<sub>2</sub> (wrapped)</div><div class="v mono num" id="r-th2">—</div></div>
+      <div class="readout"><div class="k">dθ<sub>1</sub>/dt (rad/s)</div><div class="v mono num" id="r-w1">—</div></div>
+      <div class="readout"><div class="k">dθ<sub>2</sub>/dt (rad/s)</div><div class="v mono num" id="r-w2">—</div></div>
+      <div class="readout"><div class="k">Energy E (J)</div><div class="v mono num" id="r-E">—</div></div>
+      <div class="readout"><div class="k">Energy error (norm.)</div><div class="v mono num" id="r-err">—</div></div>
+      <div class="readout"><div class="k">Max |error|</div><div class="v mono num" id="r-maxerr">—</div></div>
+      <div class="readout"><div class="k">θ<sub>1</sub> period (measured)</div><div class="v mono num" id="r-period">—</div></div>
+      <div class="readout"><div class="k">Integration steps</div><div class="v mono num" id="r-steps">0</div></div>
+    </div>
+  </main>
+
+  <!-- ======================= Controls ======================= -->
+  <aside class="controls card" aria-label="Simulation settings">
+    <section>
+      <h2>Preset</h2>
+      <select class="plain" id="preset" aria-label="Preset">
+        <option value="notebook">Notebook default (θ₂ = 0.3π)</option>
+        <option value="chaotic">Chaotic — large swing</option>
+        <option value="inverted">Nearly inverted (unstable)</option>
+        <option value="lightTop">Light upper bob (m₁ ≪ m₂)</option>
+        <option value="damped">With air drag</option>
+        <option value="custom" disabled>Custom</option>
+      </select>
+      <p class="note">Editing any value below resets the run.</p>
+    </section>
+
+    <section>
+      <h2>Parameters</h2>
+      <div class="fields">
+        <label class="field"><span class="lab">Mass 1, m₁</span>
+          <span class="inp"><input id="m1" type="number" step="any" min="0" inputmode="decimal"><span class="unit">kg</span></span></label>
+        <label class="field"><span class="lab">Mass 2, m₂</span>
+          <span class="inp"><input id="m2" type="number" step="any" min="0" inputmode="decimal"><span class="unit">kg</span></span></label>
+        <label class="field"><span class="lab">Rod 1 length, l₁</span>
+          <span class="inp"><input id="l1" type="number" step="any" min="0" inputmode="decimal"><span class="unit">m</span></span></label>
+        <label class="field"><span class="lab">Rod 2 length, l₂</span>
+          <span class="inp"><input id="l2" type="number" step="any" min="0" inputmode="decimal"><span class="unit">m</span></span></label>
+        <label class="field"><span class="lab">Gravity, g</span>
+          <span class="inp"><input id="g" type="number" step="any" min="0" inputmode="decimal"><span class="unit">m/s²</span></span></label>
+        <label class="field"><span class="lab">Air drag, c</span>
+          <span class="inp"><input id="c" type="number" step="any" min="0" inputmode="decimal"><span class="unit">N·s/m</span></span></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Initial conditions</h2>
+      <div class="fields">
+        <label class="field"><span class="lab">θ₁(0)</span>
+          <span class="inp"><input id="th1" type="number" step="any" inputmode="decimal"><span class="unit">deg</span></span>
+          <span class="hint mono num" id="th1Hint"></span></label>
+        <label class="field"><span class="lab">θ₂(0)</span>
+          <span class="inp"><input id="th2" type="number" step="any" inputmode="decimal"><span class="unit">deg</span></span>
+          <span class="hint mono num" id="th2Hint"></span></label>
+        <label class="field"><span class="lab">dθ₁/dt (0)</span>
+          <span class="inp"><input id="w1" type="number" step="any" inputmode="decimal"><span class="unit">rad/s</span></span></label>
+        <label class="field"><span class="lab">dθ₂/dt (0)</span>
+          <span class="inp"><input id="w2" type="number" step="any" inputmode="decimal"><span class="unit">rad/s</span></span></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Numerics</h2>
+      <div class="fields">
+        <label class="field"><span class="lab">Integrator</span>
+          <span class="inp"><select id="method">
+            <option value="rk4" selected>RK4 (4th order)</option>
+            <option value="euler">Explicit Euler</option>
+          </select></span></label>
+        <label class="field"><span class="lab">Time step, h</span>
+          <span class="inp"><input id="h" type="number" step="any" min="0" inputmode="decimal"><span class="unit">s</span></span></label>
+        <label class="field full"><span class="lab">Stop at t (leave blank to run forever)</span>
+          <span class="inp"><input id="tEnd" type="number" step="any" min="0" inputmode="decimal" placeholder="e.g. 5"><span class="unit">s</span></span></label>
+      </div>
+      <div class="form-error" id="formError" role="alert"></div>
+    </section>
+
+    <section>
+      <h2>Linear theory check</h2>
+      <div class="theory" id="theory"></div>
+      <div class="fields" style="margin-top:10px">
+        <label class="field full"><span class="lab">Excite amplitude (largest of |θ₁|, |θ₂|, |θ₁ − θ₂|)</span>
+          <span class="inp"><input id="modeAmp" type="number" step="any" min="0" inputmode="decimal" value="2"><span class="unit">deg</span></span></label>
+      </div>
+      <p class="note">Small-angle normal modes for the current masses, lengths and g. Excite one, run it, and compare the measured θ₁ period. The theory is exact only as the amplitude → 0; raise it to see the period shift. The motion is small on screen, so watch the traces or Angles vs t.</p>
+    </section>
+
+    <section>
+      <h2>Sensitivity</h2>
+      <label class="check"><input type="checkbox" id="shadowOn"> Show shadow pendulum</label>
+      <div class="fields" style="margin-top:10px">
+        <label class="field full"><span class="lab">Shadow offset in θ₂, δ</span>
+          <span class="inp"><input id="delta" type="number" step="any" inputmode="decimal" value="0.001"><span class="unit">rad</span></span>
+          <span class="hint" id="deltaErr"></span></label>
+      </div>
+      <p class="note">A second pendulum starts with θ₂ shifted by δ. Watch the Divergence plot to see how fast they separate. Changing δ restarts the run; turning the shadow on mid-run starts it from the current state.</p>
+    </section>
+
+    <details>
+      <summary>About the model</summary>
+      <ul>
+        <li>Point masses on massless rigid rods, frictionless pivots. Positions: x₁ = l₁ sin θ₁, y₁ = −l₁ cos θ₁, x₂ = x₁ + l₂ sin θ₂, y₂ = y₁ − l₂ cos θ₂.</li>
+        <li>θ̈₁ and θ̈₂ are the same closed-form expressions as <code>eom_double_pendulum</code>, and E = T + U is the same as <code>compute_energy</code>.</li>
+        <li>Energy error is normalized like the notebook: (E − E₀) / [(m₁+m₂) g l₁ + m₂ g l₂]. With g = 0 that scale is zero, so |E₀| is used instead.</li>
+        <li>Integration is fixed-step RK4 (the notebook uses adaptive DOP853 with rtol 1e-7, atol 1e-14). Halving h should cut the RK4 energy error by about 16×. For chaotic initial conditions the path itself will still differ after roughly 10 s (that is the sensitivity the Divergence plot shows), so compare energy error and overall behaviour, not the exact path.</li>
+        <li>Air drag is an optional extension: a force −c v on each bob, added as generalized forces. The energy lost to drag is integrated alongside, so the energy error still measures only numerical error.</li>
+      </ul>
+    </details>
+  </aside>
+
+  <!-- ======================= Diagnostics ======================= -->
+  <section class="diag card" aria-label="Diagnostics">
+    <div class="diag-head">
+      <div class="tabs" role="tablist" id="tabs">
+        <button role="tab" type="button" data-tab="energy" aria-selected="true">Energy error</button>
+        <button role="tab" type="button" data-tab="phase1" aria-selected="false">Phase space 1</button>
+        <button role="tab" type="button" data-tab="phase2" aria-selected="false">Phase space 2</button>
+        <button role="tab" type="button" data-tab="angles" aria-selected="false">Angles vs t</button>
+        <button role="tab" type="button" data-tab="diverge" aria-selected="false">Divergence</button>
+      </div>
+      <button class="btn small" id="exportBtn" type="button">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8"/><path d="M4.5 6.5 8 10l3.5-3.5"/><path d="M2.5 13.5h11"/></svg>
+        Export CSV
+      </button>
+    </div>
+    <div class="plot-wrap" id="plotWrap"><canvas id="plot" aria-label="Diagnostic plot"></canvas></div>
+    <p class="caption" id="caption"></p>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const TAU = 2 * Math.PI;
+const DEG = Math.PI / 180;
+const $ = (id) => document.getElementById(id);
+const wrap = (a) => a - TAU * Math.floor((a + Math.PI) / TAU); // -> [-pi, pi)
+
+/* =====================================================================
+   Physics — same model as the notebook.
+   State y = [th1, th1d, th2, th2d, D]; D is the energy dissipated by drag.
+   ===================================================================== */
+const NS = 5;
+
+function derivs(y, p, out) {
+  const th1 = y[0], th1d = y[1], th2 = y[2], th2d = y[3];
+  const { l1, m1, l2, m2, g, c } = p;
+
+  const dth = th1 - th2;
+  const sd = Math.sin(dth), cd = Math.cos(dth);
+  const den = m1 + m2 * sd * sd;
+
+  let th1dd = (-(m1 + m2) * g * Math.sin(th1)
+               - m2 * l2 * th2d * th2d * sd
+               + m2 * cd * (g * Math.sin(th2)
+                            - l1 * th1d * th1d * sd)) / (l1 * den);
+
+  let th2dd = ((m1 + m2) * (-g * Math.sin(th2)
+                            + l1 * th1d * th1d * sd)
+               + cd * ((m1 + m2) * g * Math.sin(th1)
+                       + m2 * l2 * th2d * th2d * sd)) / (l2 * den);
+
+  let power = 0;
+  if (c > 0) {
+    // Linear drag F = -c v on each bob -> generalized forces Q1, Q2; solve M a = Q.
+    const Q1 = -c * l1 * (2 * l1 * th1d + l2 * th2d * cd);
+    const Q2 = -c * l2 * (l1 * th1d * cd + l2 * th2d);
+    const M11 = (m1 + m2) * l1 * l1, M12 = m2 * l1 * l2 * cd, M22 = m2 * l2 * l2;
+    const det = m2 * l1 * l1 * l2 * l2 * den;
+    th1dd += (M22 * Q1 - M12 * Q2) / det;
+    th2dd += (M11 * Q2 - M12 * Q1) / det;
+    const v1sq = l1 * l1 * th1d * th1d;
+    const v2sq = v1sq + l2 * l2 * th2d * th2d + 2 * l1 * l2 * th1d * th2d * cd;
+    power = c * (v1sq + v2sq);
+  }
+
+  out[0] = th1d; out[1] = th1dd; out[2] = th2d; out[3] = th2dd; out[4] = power;
+}
+
+function energy(y, p) {
+  const th1 = y[0], th1d = y[1], th2 = y[2], th2d = y[3];
+  const { l1, m1, l2, m2, g } = p;
+  const T = 0.5 * (m1 + m2) * (l1 * th1d) ** 2
+          + 0.5 * m2 * (l2 * th2d) ** 2
+          + m2 * l1 * l2 * th1d * th2d * Math.cos(th1 - th2);
+  const U = -(m1 + m2) * g * l1 * Math.cos(th1)
+            - m2 * g * l2 * Math.cos(th2);
+  return T + U;
+}
+
+// Returns the normalization and the label describing it (the notebook's scale is zero when g = 0).
+function energyScale(p, E0) {
+  const s = (p.m1 + p.m2) * p.g * p.l1 + p.m2 * p.g * p.l2;
+  if (s > 0) return { scale: s, label: '(E − E₀) / E_scale' };
+  if (Math.abs(E0) > 0) return { scale: Math.abs(E0), label: '(E − E₀) / |E₀|' };
+  return { scale: 1, label: 'E − E₀ (J)' };
+}
+
+function bobPositions(y, p) {
+  const x1 = p.l1 * Math.sin(y[0]), y1 = -p.l1 * Math.cos(y[0]);
+  return [x1, y1, x1 + p.l2 * Math.sin(y[2]), y1 - p.l2 * Math.cos(y[2])];
+}
+
+// Small-angle normal modes: det(K - w^2 M) = 0 with M, K the linearized mass and stiffness matrices.
+function normalModes(p) {
+  const { m1, m2, l1, l2, g } = p;
+  if (!(g > 0)) return null;
+  const a = m1 * m2 * l1 * l1 * l2 * l2;
+  const b = (m1 + m2) * m2 * g * l1 * l2 * (l1 + l2);
+  const cc = (m1 + m2) * m2 * g * g * l1 * l2;
+  const disc = Math.sqrt(Math.max(0, b * b - 4 * a * cc));
+  const wFast2 = (b + disc) / (2 * a);
+  const wSlow2 = 2 * cc / (b + disc);
+  const ratio = (w2) => (m1 + m2) * (g - w2 * l1) / (w2 * m2 * l2); // theta2 / theta1
+  return [
+    { name: 'Slow (in phase)', T: TAU / Math.sqrt(wSlow2), r: ratio(wSlow2) },
+    { name: 'Fast (anti-phase)', T: TAU / Math.sqrt(wFast2), r: ratio(wFast2) },
+  ];
+}
+
+const W = {
+  k1: new Float64Array(NS), k2: new Float64Array(NS), k3: new Float64Array(NS),
+  k4: new Float64Array(NS), tmp: new Float64Array(NS),
+};
+
+function stepRK4(y, h, p) {
+  const { k1, k2, k3, k4, tmp } = W;
+  derivs(y, p, k1);
+  for (let i = 0; i < NS; i++) tmp[i] = y[i] + 0.5 * h * k1[i];
+  derivs(tmp, p, k2);
+  for (let i = 0; i < NS; i++) tmp[i] = y[i] + 0.5 * h * k2[i];
+  derivs(tmp, p, k3);
+  for (let i = 0; i < NS; i++) tmp[i] = y[i] + h * k3[i];
+  derivs(tmp, p, k4);
+  for (let i = 0; i < NS; i++) y[i] += (h / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
+}
+
+function stepEuler(y, h, p) {
+  derivs(y, p, W.k1);
+  for (let i = 0; i < NS; i++) y[i] += h * W.k1[i];
+}
+
+/* =====================================================================
+   Recorded history
+   ===================================================================== */
+const TRACE_DT = 0.002;   // seconds of sim time between trace samples
+const DIAG_DT = 0.01;     // seconds of sim time between diagnostic samples
+const TRACE_CAP = 1 << 16;
+const DIAG_CAP = 20000;
+const MAX_STEPS_PER_FRAME = 100000;
+
+// Ring buffer of bob positions (metres) for the traces.
+const trace = {
+  cap: TRACE_CAP, head: 0, len: 0, every: 1,
+  t: new Float64Array(TRACE_CAP),
+  x1: new Float64Array(TRACE_CAP), y1: new Float64Array(TRACE_CAP),
+  x2: new Float64Array(TRACE_CAP), y2: new Float64Array(TRACE_CAP),
+  idx(i) { return (this.head + i) % this.cap; },
+  clear() { this.head = 0; this.len = 0; },
+  push(t, x1, y1, x2, y2) {
+    if (this.len === this.cap) { this.head = (this.head + 1) % this.cap; this.len--; }
+    const j = (this.head + this.len) % this.cap;
+    this.t[j] = t; this.x1[j] = x1; this.y1[j] = y1; this.x2[j] = x2; this.y2[j] = y2;
+    this.len++;
+  },
+  // Keep every other point so a whole-run trace never runs out of room.
+  compact() {
+    const keys = ['t', 'x1', 'y1', 'x2', 'y2'];
+    const n = this.len, m = Math.ceil(n / 2);
+    for (const k of keys) {
+      const src = this[k], dst = new Float64Array(this.cap);
+      for (let i = 0, o = 0; i < n; i += 2, o++) dst[o] = src[this.idx(i)];
+      this[k] = dst;
+    }
+    this.head = 0; this.len = m;
+  },
+  firstAtOrAfter(tq) {
+    let lo = 0, hi = this.len;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.t[this.idx(mid)] < tq) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+  },
+};
+
+const DIAG_KEYS = ['t', 'th1', 'w1', 'th2', 'w2', 'E', 'D', 'err', 'lsep'];
+const diag = {
+  every: 1,
+  clear() { for (const k of DIAG_KEYS) this[k] = []; },
+  compact() { for (const k of DIAG_KEYS) this[k] = this[k].filter((_, i) => i % 2 === 0); },
+};
+diag.clear();
+
+/* =====================================================================
+   Simulation state
+   ===================================================================== */
+const sim = {
+  p: null, method: 'rk4', h: 1e-3, tEnd: 0,
+  y: new Float64Array(NS), shadow: null,
+  yPrev: new Float64Array(NS), shadowPrev: new Float64Array(NS),
+  t: 0, steps: 0, acc: 0,
+  running: false, finished: false, diverged: false, valid: true,
+  E0: 0, scale: 1, scaleLabel: '', maxErr: 0, crossings: [],
+};
+
+const ui = {
+  traceOn: { 1: true, 2: true },
+  traceWindow: 10,
+  speed: 1,
+  tab: 'energy',
+  dirty: true,
+  drag: 0,      // 0 = none, 1 = bob 1, 2 = bob 2
+  hover: 0,
+  pointer: null, // last pointer position over the stage, for hover after state changes
+};
+
+function normErr() {
+  return (energy(sim.y, sim.p) + sim.y[4] - sim.E0) / sim.scale;
+}
+
+function separation() {
+  if (!sim.shadow) return NaN;
+  const d1 = wrap(sim.shadow[0] - sim.y[0]);
+  const d2 = wrap(sim.shadow[2] - sim.y[2]);
+  return Math.hypot(d1, d2);
+}
+
+function recordTrace() {
+  if (ui.traceWindow === Infinity && trace.len === trace.cap) {
+    trace.compact();
+    trace.every *= 2;
+  }
+  const [x1, y1, x2, y2] = bobPositions(sim.y, sim.p);
+  trace.push(sim.t, x1, y1, x2, y2);
+}
+
+function recordDiag() {
+  if (diag.t.length >= DIAG_CAP) { diag.compact(); diag.every *= 2; }
+  const y = sim.y;
+  diag.t.push(sim.t);
+  diag.th1.push(y[0]); diag.w1.push(y[1]);
+  diag.th2.push(y[2]); diag.w2.push(y[3]);
+  diag.E.push(energy(y, sim.p));
+  diag.D.push(y[4]);
+  diag.err.push(normErr());
+  diag.lsep.push(logSeparation());
+}
+
+function logSeparation() {
+  const sep = separation();
+  return sep > 0 ? Math.log10(sep) : NaN;
+}
+
+function integrate(y, h) {
+  if (sim.method === 'euler') stepEuler(y, h, sim.p);
+  else stepRK4(y, h, sim.p);
+}
+
+const finiteState = (y) => Number.isFinite(y[0] + y[1] + y[2] + y[3] + y[4]);
+
+// Returns false (and leaves the last finite state in place) if the integration blew up.
+function stepOnce(hs) {
+  const prev = wrap(sim.y[0]);
+  sim.yPrev.set(sim.y);
+  integrate(sim.y, hs);
+  if (sim.shadow) { sim.shadowPrev.set(sim.shadow); integrate(sim.shadow, hs); }
+  if (!finiteState(sim.y) || (sim.shadow && !finiteState(sim.shadow))) {
+    sim.y.set(sim.yPrev);
+    if (sim.shadow) sim.shadow.set(sim.shadowPrev);
+    sim.diverged = true;
+    return false;
+  }
+  sim.steps++;
+  sim.t += hs;
+
+  const e = Math.abs(normErr());
+  if (e > sim.maxErr || !Number.isFinite(e)) sim.maxErr = e;
+
+  // Upward zero crossing of theta1 (linearly interpolated) for the period measurement.
+  const cur = wrap(sim.y[0]);
+  if (prev < 0 && cur >= 0 && cur - prev < Math.PI) {
+    sim.crossings.push(sim.t - hs + hs * (-prev) / (cur - prev));
+    if (sim.crossings.length > 7) sim.crossings.shift();
+  }
+
+  if (sim.steps % trace.every === 0) recordTrace();
+  if (sim.steps % diag.every === 0) recordDiag();
+  return true;
+}
+
+function advance(simDt) {
+  sim.acc += simDt;
+  const h = sim.h;
+  let n = 0;
+  while (sim.acc >= h) {
+    if (n >= MAX_STEPS_PER_FRAME) { sim.acc = 0; break; }
+    let hs = h, last = false;
+    if (sim.tEnd > 0 && sim.t + h >= sim.tEnd - 1e-6 * h) { hs = sim.tEnd - sim.t; last = true; }
+    if (hs > 1e-12 && !stepOnce(hs)) { finish(); break; }
+    sim.acc -= h;
+    n++;
+    if (last) { finish(); break; }
+  }
+}
+
+function finish() {
+  if (!trace.len || trace.t[trace.idx(trace.len - 1)] !== sim.t) recordTrace();
+  if (diag.t[diag.t.length - 1] !== sim.t) recordDiag();
+  sim.running = false;
+  sim.finished = true;
+  sim.acc = 0;
+  updateButtons();
+}
+
+// The shadow offset must be a non-zero number; otherwise there is no shadow.
+function readDelta() {
+  const s = $('delta').value.trim();
+  const d = s === '' ? NaN : Number(s);
+  const ok = Number.isFinite(d) && d !== 0;
+  $('delta').setAttribute('aria-invalid', String(!ok && $('shadowOn').checked));
+  $('deltaErr').textContent = !ok && $('shadowOn').checked ? 'δ must be a non-zero number.' : '';
+  return ok ? d : null;
+}
+
+function seedShadow() {
+  const d = readDelta();
+  if (d === null) return null;
+  const s = Float64Array.from(sim.y);
+  s[2] += d;
+  return s;
+}
+
+/* =====================================================================
+   Inputs
+   ===================================================================== */
+const PRESETS = {
+  notebook: { m1: 1, m2: 1, l1: 0.5, l2: 0.5, g: 9.8, c: 0, th1: 0, th2: 54, w1: 0, w2: 0 },
+  chaotic:  { m1: 1, m2: 1, l1: 0.5, l2: 0.5, g: 9.8, c: 0, th1: 120, th2: 150, w1: 0, w2: 0 },
+  inverted: { m1: 1, m2: 1, l1: 0.5, l2: 0.5, g: 9.8, c: 0, th1: 178, th2: 180, w1: 0, w2: 0 },
+  lightTop: { m1: 0.1, m2: 1, l1: 0.5, l2: 0.5, g: 9.8, c: 0, th1: 90, th2: 0, w1: 0, w2: 0 },
+  damped:   { m1: 1, m2: 1, l1: 0.5, l2: 0.5, g: 9.8, c: 0.2, th1: 90, th2: 90, w1: 0, w2: 0 },
+};
+const PARAM_IDS = ['m1', 'm2', 'l1', 'l2', 'g', 'c', 'th1', 'th2', 'w1', 'w2'];
+const RESET_IDS = [...PARAM_IDS, 'h'];
+
+function applyPreset(name) {
+  const pr = PRESETS[name];
+  if (!pr) return;
+  for (const k of PARAM_IDS) $(k).value = pr[k];
+  $('preset').value = name;
+  resetSim();
+}
+
+function num(id) {
+  const s = $(id).value.trim();
+  return s === '' ? NaN : Number(s);
+}
+
+function readConfig() {
+  const cfg = {};
+  for (const k of RESET_IDS) cfg[k] = num(k);
+  cfg.method = $('method').value;
+  const tEndRaw = $('tEnd').value.trim();
+  cfg.tEnd = tEndRaw === '' ? 0 : Number(tEndRaw);
+
+  const errs = {};
+  if (!(cfg.m1 > 0)) errs.m1 = 'Mass 1 must be greater than 0.';
+  if (!(cfg.m2 > 0)) errs.m2 = 'Mass 2 must be greater than 0.';
+  if (!(cfg.l1 > 0)) errs.l1 = 'Rod 1 length must be greater than 0.';
+  if (!(cfg.l2 > 0)) errs.l2 = 'Rod 2 length must be greater than 0.';
+  if (!(cfg.g >= 0)) errs.g = 'Gravity must be 0 or more.';
+  if (!(cfg.c >= 0)) errs.c = 'Drag must be 0 or more.';
+  for (const k of ['th1', 'th2', 'w1', 'w2']) if (!Number.isFinite(cfg[k])) errs[k] = 'Initial conditions must be numbers.';
+  if (!(cfg.h >= 1e-5 && cfg.h <= 0.05)) errs.h = 'Time step must be between 0.00001 and 0.05 s.';
+  // A bad stop time doesn't block running; it is ignored (run forever) until fixed.
+  if (!(cfg.tEnd >= 0)) { errs.tEnd = 'Stop time must be a positive number or blank; ignoring it for now.'; cfg.tEnd = 0; }
+  return { cfg, errs };
+}
+
+const isBlocking = (errs) => Object.keys(errs).some((k) => k !== 'tEnd');
+
+function showErrors(errs) {
+  for (const k of [...RESET_IDS, 'tEnd']) $(k).setAttribute('aria-invalid', errs[k] ? 'true' : 'false');
+  $('formError').textContent = [...new Set(Object.values(errs))].join(' ');
+}
+
+function updateAngleHints() {
+  for (const k of ['th1', 'th2']) {
+    const v = num(k);
+    $(k + 'Hint').textContent = Number.isFinite(v) ? `= ${(v / 180).toFixed(3)}π rad` : '';
+  }
+}
+
+function resetSim() {
+  const { cfg, errs } = readConfig();
+  showErrors(errs);
+  updateAngleHints();
+  sim.running = false;
+  sim.finished = false;
+  sim.diverged = false;
+  sim.acc = 0;
+  sim.valid = !isBlocking(errs);
+  if (!sim.valid) { updateButtons(); ui.dirty = true; return; }
+
+  sim.p = { m1: cfg.m1, m2: cfg.m2, l1: cfg.l1, l2: cfg.l2, g: cfg.g, c: cfg.c };
+  sim.method = cfg.method;
+  sim.h = cfg.h;
+  sim.tEnd = cfg.tEnd;
+  sim.y.set([cfg.th1 * DEG, cfg.w1, cfg.th2 * DEG, cfg.w2, 0]);
+  sim.t = 0;
+  sim.steps = 0;
+  sim.E0 = energy(sim.y, sim.p);
+  ({ scale: sim.scale, label: sim.scaleLabel } = energyScale(sim.p, sim.E0));
+  sim.maxErr = 0;
+  sim.crossings = [];
+  sim.shadow = $('shadowOn').checked ? seedShadow() : null;
+
+  trace.clear();
+  trace.every = Math.max(1, Math.round(TRACE_DT / sim.h));
+  diag.clear();
+  diag.every = Math.max(1, Math.round(DIAG_DT / sim.h));
+  recordTrace();
+  recordDiag();
+
+  updateTheory();
+  updateCaption();
+  updateButtons();
+  ui.dirty = true;
+}
+
+function toggleRun() {
+  if (!sim.valid) return;
+  if (sim.running) sim.running = false;
+  else {
+    if (sim.finished) resetSim();
+    if (sim.tEnd > 0 && sim.t >= sim.tEnd) sim.finished = true; // stop time already passed
+    else sim.running = true;
+  }
+  updateButtons();
+  ui.dirty = true;
+}
+
+function updateButtons() {
+  const b = $('startBtn');
+  b.disabled = !sim.valid;
+  b.textContent = sim.running ? 'Pause' : sim.finished ? 'Run again' : sim.t > 0 ? 'Resume' : 'Start';
+  refreshHover();
+}
+
+// Bobs can only be dragged before a run starts.
+function refreshHover() {
+  if (ui.drag) return;
+  const k = ui.pointer ? hitTest(...ui.pointer) : 0;
+  if (k !== ui.hover) { ui.hover = k; ui.dirty = true; }
+  stageView.canvas.style.cursor = k ? 'grab' : 'default';
+}
+
+function updateTheory() {
+  const box = $('theory');
+  box.textContent = '';
+  const modes = sim.p && normalModes(sim.p);
+  if (!modes) {
+    box.innerHTML = '<div class="mode-row"><span class="sub">No small oscillations when g = 0.</span></div>';
+    return;
+  }
+  modes.forEach((m) => {
+    const row = document.createElement('div');
+    row.className = 'mode-row';
+    row.innerHTML =
+      `<div><div class="val mono num">T = ${m.T.toFixed(4)} s</div>` +
+      `<div class="sub">${m.name} · θ₂/θ₁ = ${m.r >= 0 ? '+' : '−'}${Math.abs(m.r).toFixed(3)}</div></div>`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn small';
+    btn.textContent = 'Excite';
+    btn.title = 'Start from rest in this normal mode, at the amplitude below';
+    btn.addEventListener('click', () => {
+      const A = num('modeAmp');
+      const okA = A > 0 && A <= 90;
+      $('modeAmp').setAttribute('aria-invalid', String(!okA));
+      if (!okA) return;
+      const amp = A / Math.max(1, Math.abs(m.r), Math.abs(1 - m.r));
+      $('th1').value = +amp.toFixed(6);
+      $('th2').value = +(m.r * amp).toFixed(6);
+      $('w1').value = 0;
+      $('w2').value = 0;
+      $('c').value = 0;
+      markCustom();
+      resetSim();
+    });
+    row.appendChild(btn);
+    box.appendChild(row);
+  });
+}
+
+function markCustom() { $('preset').value = 'custom'; }
+
+/* =====================================================================
+   Rendering
+   ===================================================================== */
+const colors = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['text', 'muted', 'border', 'm1', 'm2', 'energy', 'rod', 'grid', 'shadow-pend', 'surface', 'stage', 'accent']) {
+    colors[k] = cs.getPropertyValue('--' + k).trim();
+  }
+}
+
+function makeView(canvas) {
+  return { canvas, ctx: canvas.getContext('2d'), w: 0, h: 0 };
+}
+const stageView = makeView($('stage'));
+const plotView = makeView($('plot'));
+
+function resizeView(v) {
+  const dpr = window.devicePixelRatio || 1;
+  const r = v.canvas.getBoundingClientRect();
+  v.w = Math.max(1, r.width);
+  v.h = Math.max(1, r.height);
+  v.canvas.width = Math.round(v.w * dpr);
+  v.canvas.height = Math.round(v.h * dpr);
+  v.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function stageGeometry() {
+  const { w, h } = stageView;
+  const L = sim.p.l1 + sim.p.l2;
+  const scale = 0.44 * Math.min(w, h) / L;
+  const rBase = Math.max(7, Math.min(18, Math.min(w, h) * 0.03));
+  const mMax = Math.max(sim.p.m1, sim.p.m2);
+  return {
+    cx: w / 2, cy: h / 2, scale, L,
+    r1: Math.max(4, rBase * Math.cbrt(sim.p.m1 / mMax)),
+    r2: Math.max(4, rBase * Math.cbrt(sim.p.m2 / mMax)),
+  };
+}
+
+function niceNumber(x) {
+  const e = Math.floor(Math.log10(x));
+  const f = x / 10 ** e;
+  return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * 10 ** e;
+}
+
+function drawTrail(ctx, G, i0, X, Y, color, fade, endX, endY) {
+  const n = trace.len;
+  const span = n - 1 - i0;
+  if (span < 1) return;
+  const sx = (x) => G.cx + x * G.scale;
+  const sy = (y) => G.cy - y * G.scale;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'butt';
+  const K = fade ? Math.min(24, span) : 1;
+  for (let k = 0; k < K; k++) {
+    const a = i0 + Math.floor(span * k / K);
+    const b = i0 + Math.floor(span * (k + 1) / K);
+    if (b <= a) continue;
+    ctx.globalAlpha = fade ? 0.06 + 0.84 * ((k + 1) / K) ** 1.5 : 0.85;
+    ctx.beginPath();
+    let j = trace.idx(a);
+    ctx.moveTo(sx(X[j]), sy(Y[j]));
+    for (let i = a + 1; i <= b; i++) { j = trace.idx(i); ctx.lineTo(sx(X[j]), sy(Y[j])); }
+    if (k === K - 1) ctx.lineTo(sx(endX), sy(endY));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPendulum(ctx, G, y, alpha, ghost) {
+  const [x1, y1, x2, y2] = bobPositions(y, sim.p);
+  const P = (x, yy) => [G.cx + x * G.scale, G.cy - yy * G.scale];
+  const [ax, ay] = P(x1, y1), [bx, by] = P(x2, y2);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = ghost ? colors['shadow-pend'] : colors.rod;
+  ctx.lineWidth = ghost ? 2 : 3;
+  if (ghost) ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(G.cx, G.cy);
+  ctx.lineTo(ax, ay);
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const bob = (x, yy, r, col, hovered) => {
+    ctx.beginPath();
+    ctx.arc(x, yy, r, 0, TAU);
+    ctx.fillStyle = ghost ? 'transparent' : col;
+    if (!ghost) ctx.fill();
+    ctx.lineWidth = ghost ? 1.5 : 2;
+    ctx.strokeStyle = ghost ? col : colors.stage;
+    ctx.stroke();
+    if (hovered) {
+      ctx.beginPath();
+      ctx.arc(x, yy, r + 5, 0, TAU);
+      ctx.strokeStyle = col;
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+    }
+  };
+  const hl = (k) => !ghost && !sim.running && (ui.hover === k || ui.drag === k);
+  bob(ax, ay, G.r1, colors.m1, hl(1));
+  bob(bx, by, G.r2, colors.m2, hl(2));
+  ctx.restore();
+  return { ax, ay, bx, by, x1, y1, x2, y2 };
+}
+
+function drawStage() {
+  const v = stageView, ctx = v.ctx;
+  ctx.clearRect(0, 0, v.w, v.h);
+  if (!sim.p) return;
+  const G = stageGeometry();
+
+  // Reach circle
+  ctx.save();
+  ctx.strokeStyle = colors.grid;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 6]);
+  ctx.beginPath();
+  ctx.arc(G.cx, G.cy, G.L * G.scale, 0, TAU);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(G.cx - G.L * G.scale - 8, G.cy);
+  ctx.lineTo(G.cx + G.L * G.scale + 8, G.cy);
+  ctx.moveTo(G.cx, G.cy - G.L * G.scale - 8);
+  ctx.lineTo(G.cx, G.cy + G.L * G.scale + 8);
+  ctx.stroke();
+  ctx.restore();
+
+  // Traces
+  const [x1, y1, x2, y2] = bobPositions(sim.y, sim.p);
+  if (trace.len > 1 && (ui.traceOn[1] || ui.traceOn[2])) {
+    const whole = ui.traceWindow === Infinity;
+    const i0 = whole ? 0 : Math.min(trace.len - 1, trace.firstAtOrAfter(sim.t - ui.traceWindow));
+    if (ui.traceOn[1]) drawTrail(ctx, G, i0, trace.x1, trace.y1, colors.m1, !whole, x1, y1);
+    if (ui.traceOn[2]) drawTrail(ctx, G, i0, trace.x2, trace.y2, colors.m2, !whole, x2, y2);
+  }
+
+  // Shadow pendulum
+  if (sim.shadow) drawPendulum(ctx, G, sim.shadow, 0.75, true);
+
+  // Mount + pivot
+  ctx.save();
+  ctx.fillStyle = colors.rod;
+  ctx.fillRect(G.cx - 18, G.cy - 3, 36, 2);
+  ctx.strokeStyle = colors.rod;
+  ctx.lineWidth = 1;
+  for (let i = -16; i <= 12; i += 7) {
+    ctx.beginPath();
+    ctx.moveTo(G.cx + i, G.cy - 3);
+    ctx.lineTo(G.cx + i + 5, G.cy - 9);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  drawPendulum(ctx, G, sim.y, 1, false);
+
+  ctx.save();
+  ctx.fillStyle = colors.stage;
+  ctx.strokeStyle = colors.rod;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(G.cx, G.cy, 4, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // Scale bar
+  const barM = niceNumber(G.L / 3);
+  const barPx = barM * G.scale;
+  const bx = 14, by = v.h - 16;
+  ctx.save();
+  ctx.strokeStyle = colors.muted;
+  ctx.fillStyle = colors.muted;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(bx, by - 4); ctx.lineTo(bx, by); ctx.lineTo(bx + barPx, by); ctx.lineTo(bx + barPx, by - 4);
+  ctx.stroke();
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`${+barM.toPrecision(3)} m`, bx + barPx + 6, by + 1);
+  ctx.restore();
+}
+
+/* ---------- Plots ---------- */
+function niceTicks(min, max, count, integer) {
+  let step = niceNumber((max - min) / count);
+  if (integer) step = Math.max(1, Math.round(step));
+  const ticks = [];
+  const i0 = Math.ceil(min / step - 1e-9);
+  for (let i = 0; i < 50; i++) {
+    const v = (i0 + i) * step;
+    if (v > max + step * 1e-9) break;
+    ticks.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+  }
+  return { ticks, step };
+}
+
+// Pads a data range; a range that is zero or only a few ulps wide is treated as constant.
+function padRange(lo, hi, frac) {
+  if (hi - lo <= 1e-9 * Math.max(Math.abs(lo), Math.abs(hi))) {
+    const c = (lo + hi) / 2, d = Math.abs(c) * 0.05 || 1e-12;
+    return [c - d, c + d];
+  }
+  const p = (hi - lo) * frac;
+  return [lo - p, hi + p];
+}
+
+function tickLabel(v, step) {
+  if (v === 0) return '0';
+  const a = Math.abs(step);
+  if (a < 1e-3 || a >= 1e5) {
+    const d = Math.min(3, Math.max(0, Math.floor(Math.log10(Math.abs(v))) - Math.floor(Math.log10(a))));
+    return v.toExponential(d).replace('e+', 'e');
+  }
+  return v.toFixed(Math.max(0, -Math.floor(Math.log10(a) + 1e-9)));
+}
+
+function drawPlot(cfg) {
+  const v = plotView, ctx = v.ctx;
+  ctx.clearRect(0, 0, v.w, v.h);
+  const M = { l: 64, r: 14, t: 10, b: 38 };
+  const pw = v.w - M.l - M.r, ph = v.h - M.t - M.b;
+  if (pw < 20 || ph < 20) return;
+
+  let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity, npts = 0;
+  for (const s of cfg.series) {
+    for (let i = 0; i < s.xs.length; i++) {
+      const x = s.xs[i], y = s.ys[i];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < xmin) xmin = x; if (x > xmax) xmax = x;
+      if (y < ymin) ymin = y; if (y > ymax) ymax = y;
+      npts++;
+    }
+  }
+
+  ctx.font = '11px system-ui, sans-serif';
+  if (npts < 2) {
+    ctx.fillStyle = colors.muted;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cfg.empty || 'No data yet. Press Start.', v.w / 2, v.h / 2);
+    return;
+  }
+  if (cfg.xMinZero) xmin = Math.min(xmin, 0);
+  [xmin, xmax] = padRange(xmin, xmax, 0);
+  [ymin, ymax] = padRange(ymin, ymax, 0.08);
+
+  const X = (x) => M.l + (x - xmin) / (xmax - xmin) * pw;
+  const Y = (y) => M.t + (1 - (y - ymin) / (ymax - ymin)) * ph;
+
+  // Grid + ticks
+  const xt = niceTicks(xmin, xmax, Math.max(2, Math.floor(pw / 80)));
+  let yt = niceTicks(ymin, ymax, Math.max(2, Math.floor(ph / 45)), cfg.logY);
+  let logLabel = (t) => `1e${t}`;
+  if (cfg.logY && yt.ticks.length < 2) {
+    // Less than a decade in view: use evenly spaced log ticks with mantissa labels.
+    yt = niceTicks(ymin, ymax, Math.max(2, Math.floor(ph / 45)));
+    logLabel = (t) => (10 ** t).toExponential(1).replace('e+', 'e');
+  }
+  ctx.strokeStyle = colors.grid;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = colors.muted;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (const t of xt.ticks) {
+    const x = Math.round(X(t)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(x, M.t); ctx.lineTo(x, M.t + ph); ctx.stroke();
+    ctx.fillText(tickLabel(t, xt.step), x, M.t + ph + 5);
+  }
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (const t of yt.ticks) {
+    const y = Math.round(Y(t)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(M.l, y); ctx.lineTo(M.l + pw, y); ctx.stroke();
+    ctx.fillText(cfg.logY ? logLabel(t) : tickLabel(t, yt.step), M.l - 6, y);
+  }
+  if (!cfg.logY && ymin < 0 && ymax > 0) {
+    ctx.strokeStyle = colors.border;
+    const y = Math.round(Y(0)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(M.l, y); ctx.lineTo(M.l + pw, y); ctx.stroke();
+  }
+  ctx.strokeStyle = colors.border;
+  ctx.strokeRect(M.l + 0.5, M.t + 0.5, pw, ph);
+
+  // Axis labels
+  ctx.fillStyle = colors.muted;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(cfg.xLabel, M.l + pw / 2, v.h - 2);
+  ctx.save();
+  ctx.translate(12, M.t + ph / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(cfg.yLabel, 0, 0);
+  ctx.restore();
+
+  // Series
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(M.l, M.t, pw, ph);
+  ctx.clip();
+  for (const s of cfg.series) {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.width || 1.6;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    let pen = false, px = 0;
+    for (let i = 0; i < s.xs.length; i++) {
+      const x = s.xs[i], y = s.ys[i];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) { pen = false; continue; }
+      if (pen && s.breakJump && Math.abs(x - px) > s.breakJump) pen = false;
+      if (pen) ctx.lineTo(X(x), Y(y)); else ctx.moveTo(X(x), Y(y));
+      pen = true; px = x;
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Legend
+  const named = cfg.series.filter((s) => s.name);
+  if (named.length > 1) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    let lx = M.l + 10;
+    for (const s of named) {
+      ctx.fillStyle = s.color;
+      ctx.fillRect(lx, M.t + 12, 14, 3);
+      ctx.fillStyle = colors.text;
+      ctx.fillText(s.name, lx + 19, M.t + 13.5);
+      lx += 28 + ctx.measureText(s.name).width;
+    }
+  }
+}
+
+const TABS = {
+  energy: {
+    caption: () => (sim.p && sim.p.g > 0
+      ? 'Normalized energy error, as in the notebook: (E − E₀) / E_scale with E_scale = (m₁+m₂) g l₁ + m₂ g l₂.'
+      : 'Energy error. With g = 0 the notebook’s E_scale is zero, so this is divided by |E₀| instead (or shown in joules if E₀ = 0).')
+      + ' With drag on, the energy lost to drag is added back, so this still measures only numerical error. Try a bigger h or Explicit Euler to watch it grow.',
+    build: () => ({
+      xLabel: 't (s)', yLabel: sim.scaleLabel, xMinZero: true,
+      series: [{ xs: diag.t, ys: diag.err, color: colors.energy, width: 2 }],
+    }),
+  },
+  phase1: {
+    caption: 'State-space projection of arm 1: θ₁ (wrapped to [−π, π)) against dθ₁/dt. Closed loops mean periodic motion; a filled-in region means quasi-periodic or chaotic motion.',
+    build: () => ({
+      xLabel: 'θ₁ (rad, wrapped)', yLabel: 'dθ₁/dt (rad/s)',
+      series: [{ xs: diag.th1.map(wrap), ys: diag.w1, color: colors.m1, breakJump: Math.PI }],
+    }),
+  },
+  phase2: {
+    caption: 'State-space projection of arm 2: θ₂ (wrapped to [−π, π)) against dθ₂/dt.',
+    build: () => ({
+      xLabel: 'θ₂ (rad, wrapped)', yLabel: 'dθ₂/dt (rad/s)',
+      series: [{ xs: diag.th2.map(wrap), ys: diag.w2, color: colors.m2, breakJump: Math.PI }],
+    }),
+  },
+  angles: {
+    caption: 'Both angles against time (not wrapped, so a full flip shows as a step of 2π).',
+    build: () => ({
+      xLabel: 't (s)', yLabel: 'angle (rad)', xMinZero: true,
+      series: [
+        { xs: diag.t, ys: diag.th1, color: colors.m1, name: 'θ₁' },
+        { xs: diag.t, ys: diag.th2, color: colors.m2, name: 'θ₂' },
+      ],
+    }),
+  },
+  diverge: {
+    caption: 'Angular separation √(Δθ₁² + Δθ₂²) between the main and shadow pendulums, log scale. A straight rising line means exponential divergence; its slope × ln 10 estimates the largest Lyapunov exponent. It levels off near π once the two are unrelated.',
+    build: () => ({
+      xLabel: 't (s)', yLabel: '|Δθ| (rad)', logY: true, xMinZero: true,
+      empty: sim.shadow ? 'No data yet. Press Start.'
+        : $('shadowOn').checked ? 'Set a non-zero δ in Sensitivity.'
+        : 'Turn on “Show shadow pendulum” in Sensitivity.',
+      series: [{ xs: diag.t, ys: diag.lsep, color: colors.accent, width: 2 }],
+    }),
+  },
+};
+
+function drawDiag() {
+  drawPlot(TABS[ui.tab].build());
+}
+
+function updateCaption() {
+  const cap = TABS[ui.tab].caption;
+  $('caption').textContent = typeof cap === 'function' ? cap() : cap;
+}
+
+/* ---------- Readouts ---------- */
+function fmtSigned(x, d) {
+  if (!Number.isFinite(x)) return '—';
+  return (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(d);
+}
+
+// Mean interval between upward zero crossings, or null when the intervals disagree (not periodic).
+function measuredPeriod() {
+  const c = sim.crossings;
+  if (c.length < 3) return undefined;
+  const iv = [];
+  for (let i = 1; i < c.length; i++) iv.push(c[i] - c[i - 1]);
+  const mean = (c[c.length - 1] - c[0]) / iv.length;
+  const spread = (Math.max(...iv) - Math.min(...iv)) / mean;
+  return spread > 0.01 ? null : mean;
+}
+function fmtSci(x) {
+  if (!Number.isFinite(x)) return 'diverged';
+  if (x === 0) return '0';
+  return (x < 0 ? '−' : '+') + Math.abs(x).toExponential(2).replace('e+', 'e');
+}
+
+function updateReadouts() {
+  $('timeLabel').textContent = `t = ${sim.t.toFixed(3)} s`;
+  let status;
+  if (!sim.valid) status = 'Fix the highlighted values';
+  else if (sim.running) status = sim.method === 'euler' ? 'Running · Explicit Euler' : 'Running';
+  else if (sim.diverged) status = `Diverged at t = ${sim.t.toFixed(3)} s · try RK4 or a smaller h`;
+  else if (sim.finished) status = `Finished at t = ${+sim.t.toPrecision(6)} s`;
+  else if (sim.t > 0) status = 'Paused · Reset to drag the bobs';
+  else status = 'Ready · drag a bob to set its angle';
+  $('statusLabel').textContent = status;
+  if (!sim.p) return;
+
+  const y = sim.y;
+  $('r-th1').textContent = fmtSigned(wrap(y[0]) / DEG, 2) + '°';
+  $('r-th2').textContent = fmtSigned(wrap(y[2]) / DEG, 2) + '°';
+  $('r-w1').textContent = fmtSigned(y[1], 3);
+  $('r-w2').textContent = fmtSigned(y[3], 3);
+  const E = energy(y, sim.p);
+  $('r-E').textContent = Number.isFinite(E) ? E.toFixed(5) : 'diverged';
+  $('r-err').textContent = fmtSci(normErr());
+  $('r-maxerr').textContent = Number.isFinite(sim.maxErr) ? (sim.maxErr === 0 ? '0' : sim.maxErr.toExponential(2).replace('e+', 'e')) : 'diverged';
+  const T = measuredPeriod();
+  $('r-period').textContent = T === undefined ? '—' : T === null ? 'irregular' : `${T.toFixed(4)} s`;
+  $('r-period').title = T === null ? 'Successive θ₁ zero-crossing intervals differ by more than 1%, so the motion is not periodic.' : '';
+  $('r-steps').textContent = sim.steps.toLocaleString();
+}
+
+/* =====================================================================
+   Main loop
+   ===================================================================== */
+let lastTs = null;
+function frame(ts) {
+  if (sim.running) {
+    const dt = lastTs === null ? 0 : Math.min((ts - lastTs) / 1000, 0.1);
+    advance(dt * ui.speed);
+    ui.dirty = true;
+  }
+  lastTs = ts;
+  if (ui.dirty) {
+    ui.dirty = false;
+    drawStage();
+    drawDiag();
+    updateReadouts();
+  }
+  requestAnimationFrame(frame);
+}
+
+/* =====================================================================
+   Events
+   ===================================================================== */
+$('startBtn').addEventListener('click', toggleRun);
+$('resetBtn').addEventListener('click', resetSim);
+$('preset').addEventListener('change', (e) => applyPreset(e.target.value));
+
+for (const id of RESET_IDS) {
+  $(id).addEventListener('input', () => {
+    if (PARAM_IDS.includes(id)) markCustom();
+    resetSim();
+  });
+}
+$('method').addEventListener('change', resetSim);
+
+// Stop time: validate while typing, apply on Enter/blur so typing "10" doesn't stop the run at "1".
+$('tEnd').addEventListener('input', () => showErrors(readConfig().errs));
+$('tEnd').addEventListener('change', () => {
+  const { errs, cfg } = readConfig();
+  showErrors(errs);
+  if (!sim.valid) return;
+  sim.tEnd = cfg.tEnd;
+  const past = sim.tEnd > 0 && sim.t >= sim.tEnd;
+  if (sim.running && past) finish();
+  else if (!sim.running && sim.t > 0 && !sim.diverged) sim.finished = past;
+  updateButtons();
+  ui.dirty = true;
+});
+$('modeAmp').addEventListener('input', () => $('modeAmp').setAttribute('aria-invalid', 'false'));
+
+for (const k of [1, 2]) {
+  const b = $('trace' + k);
+  b.addEventListener('click', () => {
+    ui.traceOn[k] = !ui.traceOn[k];
+    b.setAttribute('aria-pressed', String(ui.traceOn[k]));
+    ui.dirty = true;
+  });
+}
+$('traceLen').addEventListener('change', (e) => {
+  ui.traceWindow = e.target.value === 'inf' ? Infinity : Number(e.target.value);
+  if (ui.traceWindow !== Infinity && sim.valid) trace.every = Math.max(1, Math.round(TRACE_DT / sim.h));
+  ui.dirty = true;
+});
+$('clearTrace').addEventListener('click', () => {
+  trace.clear();
+  if (sim.p) {
+    trace.every = Math.max(1, Math.round(TRACE_DT / sim.h));
+    recordTrace();
+  }
+  ui.dirty = true;
+});
+$('speed').addEventListener('change', (e) => { ui.speed = Number(e.target.value); });
+
+$('shadowOn').addEventListener('change', (e) => {
+  sim.shadow = e.target.checked && sim.valid ? seedShadow() : null;
+  if (!e.target.checked) readDelta(); // clears any δ error
+  if (sim.steps === 0 && diag.lsep.length) diag.lsep[diag.lsep.length - 1] = logSeparation();
+  ui.dirty = true;
+});
+$('delta').addEventListener('input', () => {
+  if ($('shadowOn').checked) resetSim();
+  else readDelta();
+});
+
+$('tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-tab]');
+  if (!b) return;
+  ui.tab = b.dataset.tab;
+  for (const t of $('tabs').querySelectorAll('button')) t.setAttribute('aria-selected', String(t === b));
+  updateCaption();
+  ui.dirty = true;
+});
+
+$('exportBtn').addEventListener('click', () => {
+  if (!sim.p || diag.t.length === 0) return;
+  const p = sim.p;
+  const lines = ['t,th1,th1d,th2,th2d,x1,y1,x2,y2,energy,dissipated_energy,energy_error_norm'];
+  for (let i = 0; i < diag.t.length; i++) {
+    const y = [diag.th1[i], diag.w1[i], diag.th2[i], diag.w2[i]];
+    const [x1, y1, x2, y2] = bobPositions(y, p);
+    lines.push([diag.t[i], y[0], y[1], y[2], y[3], x1, y1, x2, y2, diag.E[i], diag.D[i], diag.err[i]]
+      .map((v) => +v.toPrecision(10)).join(','));
+  }
+  // Parameters go in the file name so the CSV itself loads with a plain read_csv / loadtxt.
+  const deg = (r) => +(r / DEG).toFixed(3);
+  const name = ['double-pendulum', `m1-${p.m1}`, `m2-${p.m2}`, `l1-${p.l1}`, `l2-${p.l2}`, `g-${p.g}`,
+    ...(p.c ? [`c-${p.c}`] : []), `th1-${deg(diag.th1[0])}`, `th2-${deg(diag.th2[0])}`,
+    ...(diag.w1[0] || diag.w2[0] ? [`w1-${diag.w1[0]}`, `w2-${diag.w2[0]}`] : []),
+    sim.method, `h-${sim.h}`].join('_') + '.csv';
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+// Space starts/pauses and R resets, except while typing in a field or when a control was focused
+// from the keyboard (then Space keeps its normal job of pressing that control).
+let spaceHandled = false;
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  const typing = t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(t.type));
+  if (typing) return;
+  const kbFocused = t !== document.body && t.matches(':focus-visible');
+  if (e.code === 'Space') {
+    if (kbFocused) return;
+    e.preventDefault();
+    spaceHandled = true;
+    if (!e.repeat) toggleRun();
+  } else if (e.key === 'r' || e.key === 'R') {
+    if (kbFocused && t.tagName === 'SELECT') return;
+    e.preventDefault();
+    if (!e.repeat) resetSim();
+  }
+});
+document.addEventListener('keyup', (e) => {
+  if (e.code === 'Space' && spaceHandled) { e.preventDefault(); spaceHandled = false; }
+});
+
+/* ---------- Drag bobs to set the initial angles ---------- */
+function pointerPos(e) {
+  const r = stageView.canvas.getBoundingClientRect();
+  return [e.clientX - r.left, e.clientY - r.top];
+}
+// Which bob (1 or 2) is under the pointer; only before a run starts, nearest bob wins.
+function hitTest(px, py) {
+  if (!sim.p || !sim.valid || sim.running || sim.t > 0) return 0;
+  const G = stageGeometry();
+  const [x1, y1, x2, y2] = bobPositions(sim.y, sim.p);
+  const d = (x, y) => Math.hypot(G.cx + x * G.scale - px, G.cy - y * G.scale - py);
+  const d1 = d(x1, y1), d2 = d(x2, y2);
+  const h1 = d1 <= G.r1 + 10, h2 = d2 <= G.r2 + 10;
+  if (h1 && h2) return d1 < d2 ? 1 : 2;
+  return h2 ? 2 : h1 ? 1 : 0;
+}
+const stageCanvas = stageView.canvas;
+stageCanvas.addEventListener('pointerdown', (e) => {
+  ui.pointer = pointerPos(e);
+  const k = hitTest(...ui.pointer);
+  if (!k) return;
+  ui.drag = k;
+  stageCanvas.setPointerCapture(e.pointerId);
+  e.preventDefault();
+  ui.dirty = true;
+});
+// Touches scroll the page unless they start on a bob.
+stageCanvas.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  if (t && hitTest(...pointerPos(t))) e.preventDefault();
+}, { passive: false });
+stageCanvas.addEventListener('pointermove', (e) => {
+  const [px, py] = ui.pointer = pointerPos(e);
+  if (!ui.drag) { refreshHover(); return; }
+  stageCanvas.style.cursor = 'grabbing';
+  const G = stageGeometry();
+  const wx = (px - G.cx) / G.scale, wy = (G.cy - py) / G.scale;
+  if (ui.drag === 1) {
+    $('th1').value = +(Math.atan2(wx, -wy) / DEG).toFixed(1);
+  } else {
+    const [x1, y1] = bobPositions(sim.y, sim.p);
+    $('th2').value = +(Math.atan2(wx - x1, -(wy - y1)) / DEG).toFixed(1);
+  }
+  markCustom();
+  resetSim();
+});
+const endDrag = () => {
+  if (!ui.drag) return;
+  ui.drag = 0;
+  refreshHover();
+  ui.dirty = true;
+};
+stageCanvas.addEventListener('pointerup', endDrag);
+stageCanvas.addEventListener('pointercancel', endDrag);
+stageCanvas.addEventListener('pointerleave', () => {
+  ui.pointer = null;
+  refreshHover();
+});
+
+/* ---------- Resize + theme ---------- */
+const resizeAll = () => {
+  resizeView(stageView);
+  resizeView(plotView);
+  drawStage(); // resizing clears the canvases, so repaint now rather than next frame
+  drawDiag();
+};
+const ro = new ResizeObserver(resizeAll);
+ro.observe($('stageWrap'));
+ro.observe($('plotWrap'));
+// Re-rasterize when the window moves to a screen with a different pixel ratio.
+const watchDpr = () => {
+  matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+    .addEventListener('change', () => { resizeAll(); watchDpr(); }, { once: true });
+};
+watchDpr();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); ui.dirty = true; });
+new MutationObserver(() => { readColors(); ui.dirty = true; })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------- Boot ---------- */
+readColors();
+$('h').value = 0.001;
+applyPreset('notebook');
+resizeView(stageView);
+resizeView(plotView);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
